@@ -8,7 +8,7 @@ app = FastAPI(title="Todo List API")
 # -------------------------------
 # GLOBAL VARIABLES & UTILITIES
 # -------------------------------
-task_id_counter = 1  # Renamed from 'id' to avoid shadowing built-in 'id()'
+task_id_counter = 1  # Avoid overwriting Python’s built-in id()
 
 
 def generate_next_id():
@@ -34,7 +34,6 @@ class Task(TaskCreate):
 
 
 class TaskUpdate(BaseModel):
-    id: int
     title: Optional[str] = None
     description: Optional[str] = None
     is_completed: Optional[bool] = None
@@ -59,10 +58,17 @@ class Database:
                 return task
         return None
 
+    def delete_task(self, task_id: int) -> bool:
+        """Delete a task by its ID."""
+        for i, task in enumerate(self._tasks):
+            if task.id == task_id:
+                del self._tasks[i]
+                return True
+        return False
+
 
 # Create single in-memory DB instance
 db = Database()
-
 
 # -------------------------------
 # ENDPOINTS
@@ -122,16 +128,24 @@ def partial_update(task_id: int, update_data: TaskUpdate):
             detail="At least one field must be provided for update."
         )
 
-    # Update the provided fields
+    # Update provided fields
     if update_data.title is not None:
         task.title = update_data.title
-
     if update_data.description is not None:
         task.description = update_data.description
-
     if update_data.is_completed is not None:
         task.is_completed = update_data.is_completed
 
     task.updated_at = datetime.utcnow()
 
     return {"success": True, "message": "Task updated successfully", "data": task}
+
+
+@app.delete("/tasks/{task_id}", status_code=status.HTTP_200_OK)
+def delete_task(task_id: int):
+    """Delete a task by its ID."""
+    deleted = db.delete_task(task_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    return {"success": True, "message": f"Task with ID {task_id} deleted successfully."}
